@@ -35,10 +35,19 @@ export function AuthPage() {
   };
 
   const signInGoogle = async () => {
+    // Ensure origin doesn't have a double slash if you manually add one
+    const origin = window.location.origin.endsWith('/') 
+      ? window.location.origin.slice(0, -1) 
+      : window.location.origin;
+  
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/app/dashboard` },
+      options: { 
+        // This must exactly match an entry or wildcard in your Redirect URLs list
+        redirectTo: `${origin}/app/dashboard` 
+      },
     });
+  
     if (error) {
       toast.error(error.message);
     }
