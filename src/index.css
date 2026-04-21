@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  :root {
+    color-scheme: dark;
+  }
+
+  :root.light {
+    color-scheme: light;
+  }
+
+  body {
+    @apply antialiased;
+  }
+
+  :root.dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+
+  :root.light body {
+    @apply bg-slate-100 text-slate-900;
+  }
+
+  :root.light .bg-slate-950 {
+    background-color: rgb(248 250 252) !important;
+  }
+
+  :root.light .bg-slate-900,
+  :root.light .bg-slate-900\/70,
+  :root.light .bg-slate-900\/40 {
+    background-color: rgb(255 255 255) !important;
+  }
+
+  :root.light .border-slate-800,
+  :root.light .border-slate-700 {
+    border-color: rgb(203 213 225) !important;
+  }
+
+  :root.light .text-slate-300 {
+    color: rgb(15 23 42) !important;
+  }
+
+  :root.light .text-slate-400 {
+    color: rgb(15 23 42) !important;
+  }
+
+}
