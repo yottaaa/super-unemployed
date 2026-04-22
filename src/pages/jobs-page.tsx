@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -12,7 +12,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormMessage } 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { createJob, createTrackerItemFromJob, deleteJob, listJobs, updateJob } from "@/lib/api";
+import { useAuth } from "@/contexts/auth-context";
+import { createJob, createTrackerItemFromJob, deleteJob, getJobById, listJobs, updateJob } from "@/lib/api";
 import type { Job } from "@/types/data";
 
 const jobSchema = z.object({
@@ -29,6 +30,9 @@ type JobForm = z.infer<typeof jobSchema>;
 const defaultTags = ["Remote", "JavaScript", "Full-time", "Frontend", "Backend"];
 
 export function JobsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { session } = useAuth();
+  const editId = searchParams.get("edit");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedTag, setSelectedTag] = useState<string>("All");
   const [ownershipFilter, setOwnershipFilter] = useState<"all" | "owned">("all");
@@ -64,6 +68,63 @@ export function JobsPage() {
   useEffect(() => {
     void refreshJobs(ownershipFilter);
   }, [ownershipFilter]);
+
+  useEffect(() => {
+    if (!editId || !session?.user?.id) {
+      return;
+    }
+    let cancelled = false;
+
+    const clearEditParam = () => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("edit");
+          return next;
+        },
+        { replace: true },
+      );
+    };
+
+    void (async () => {
+      try {
+        const job = await getJobById(editId);
+        if (cancelled) {
+          return;
+        }
+        if (!job) {
+          toast.error("Job not found");
+          clearEditParam();
+          return;
+        }
+        if (job.user_id !== session.user.id) {
+          toast.error("You can only edit your own jobs");
+          clearEditParam();
+          return;
+        }
+        setEditingJob(job);
+        form.reset({
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          description: job.description,
+          applyUrl: job.apply_url ?? "",
+          tags: job.tags.join(", "),
+        });
+        setDialogOpen(true);
+        clearEditParam();
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Failed to load job");
+          clearEditParam();
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editId, session?.user?.id, setSearchParams]);
 
   const tags = useMemo(() => {
     const all = new Set<string>(defaultTags);
@@ -219,7 +280,7 @@ export function JobsPage() {
                   >
                     Track this job
                   </Button>
-                  {ownershipFilter === "owned" ? (
+                  {session?.user?.id === job.user_id ? (
                     <>
                       <Button
                         variant="outline"
