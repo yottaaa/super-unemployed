@@ -8,6 +8,7 @@ import { JobsPage } from "@/pages/jobs-page";
 import { JobDetailPage } from "@/pages/job-detail-page";
 import { JobTrackerPage } from "@/pages/job-tracker-page";
 import { InterviewsPage } from "@/pages/interviews-page";
+import { RoadmapDetailPage } from "@/pages/roadmap-detail-page";
 import { RoadmapsPage } from "@/pages/roadmaps-page";
 import { ResumeEditorPage } from "./pages/resume-editor-page";
 import { CoverLetterPage } from "./pages/cover-letter-page";
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="tracker" element={<JobTrackerPage />} />
           <Route path="interviews" element={<InterviewsPage />} />
           <Route path="roadmaps" element={<RoadmapsPage />} />
+          <Route path="roadmaps/:id" element={<RoadmapDetailPage />} />
           <Route path="documents/resume" element={<ResumeEditorPage />} />
           <Route path="documents/cover-letter" element={<CoverLetterPage />} />
           <Route path="editor" element={<Navigate to="/app/documents/resume" replace />} />

@@ -391,6 +391,27 @@ function parseRoadmapSteps(steps: unknown, roadmapId: string, createdAt: string,
     .sort((a, b) => a.order_index - b.order_index);
 }
 
+type RoadmapDbRow = {
+  id: string;
+  user_id: string;
+  career_title: string;
+  created_at: string;
+  steps: unknown;
+  career_description?: unknown;
+};
+
+function mapRoadmapRow(item: RoadmapDbRow): Roadmap {
+  const steps = parseRoadmapSteps(item.steps, item.id, item.created_at, item.user_id);
+  return {
+    id: item.id,
+    user_id: item.user_id,
+    career_title: item.career_title,
+    career_description: typeof item.career_description === "string" ? item.career_description : "",
+    steps,
+    created_at: item.created_at,
+  };
+}
+
 export async function listRoadmaps(scope: FilterScope = "all", searchTitle?: string) {
   let query = supabase.from("roadmaps").select("*").order("created_at", { ascending: false }).limit(20);
   if (scope === "owned") {
@@ -406,23 +427,29 @@ export async function listRoadmaps(scope: FilterScope = "all", searchTitle?: str
     throw error;
   }
 
-  return (data ?? []).map((item) => {
-    const steps = parseRoadmapSteps(item.steps, item.id, item.created_at, item.user_id);
-    return {
-      id: item.id,
-      user_id: item.user_id,
-      career_title: item.career_title,
-      steps,
-      created_at: item.created_at,
-    } satisfies Roadmap;
-  });
+  return (data ?? []).map((item) => mapRoadmapRow(item as RoadmapDbRow));
+}
+
+export async function getRoadmapById(roadmapId: string) {
+  const { data, error } = await supabase.from("roadmaps").select("*").eq("id", roadmapId).maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (!data) {
+    return null;
+  }
+  return mapRoadmapRow(data as RoadmapDbRow);
 }
 
 export async function listPublicRoadmaps(searchTitle?: string) {
   return listRoadmaps("all", searchTitle);
 }
 
-export async function createRoadmap(payload: { careerTitle: string; steps: Array<{ title: string; details: string; resourceUrl: string }> }) {
+export async function createRoadmap(payload: {
+  careerTitle: string;
+  careerDescription: string;
+  steps: Array<{ title: string; details: string; resourceUrl: string }>;
+}) {
   const userId = await getActiveUserId();
   const normalizedSteps = payload.steps.map((step, index) => ({
     id: crypto.randomUUID(),
@@ -440,6 +467,7 @@ export async function createRoadmap(payload: { careerTitle: string; steps: Array
   const { error } = await supabase.from("roadmaps").insert({
     user_id: userId,
     career_title: payload.careerTitle,
+    career_description: payload.careerDescription.trim(),
     steps: normalizedSteps,
   });
 
@@ -450,7 +478,11 @@ export async function createRoadmap(payload: { careerTitle: string; steps: Array
 
 export async function updateRoadmap(
   roadmapId: string,
-  payload: { careerTitle: string; steps: Array<{ title: string; details: string; resourceUrl: string }> },
+  payload: {
+    careerTitle: string;
+    careerDescription: string;
+    steps: Array<{ title: string; details: string; resourceUrl: string }>;
+  },
 ) {
   const userId = await getActiveUserId();
   const normalizedSteps = payload.steps.map((step, index) => ({
@@ -469,6 +501,7 @@ export async function updateRoadmap(
     .from("roadmaps")
     .update({
       career_title: payload.careerTitle,
+      career_description: payload.careerDescription.trim(),
       steps: normalizedSteps,
     })
     .eq("id", roadmapId)
@@ -538,6 +571,7 @@ export async function createRoadmapStep(step: Omit<RoadmapStep, "id" | "created_
     const { error } = await supabase.from("roadmaps").insert({
       user_id: userId,
       career_title: "My Career Path",
+      career_description: "",
       steps: [newStep],
     });
     if (error) {

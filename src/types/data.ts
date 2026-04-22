@@ -88,6 +88,7 @@ export type Roadmap = {
   id: string;
   user_id: string;
   career_title: string;
+  career_description: string;
   steps: RoadmapStep[];
   created_at?: string;
 };

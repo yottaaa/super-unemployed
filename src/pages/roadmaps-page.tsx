@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -6,18 +7,24 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { createRoadmap, deleteRoadmap, listRoadmaps, updateRoadmap } from "@/lib/api";
+import { useAuth } from "@/contexts/auth-context";
+import { createRoadmap, getRoadmapById, listRoadmaps, updateRoadmap } from "@/lib/api";
 import type { Roadmap } from "@/types/data";
 
 export function RoadmapsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { session } = useAuth();
   const [roadmaps, setRoadmaps] = useState<Roadmap[]>([]);
   const [ownershipFilter, setOwnershipFilter] = useState<"all" | "owned">("all");
   const [searchTitle, setSearchTitle] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingRoadmap, setEditingRoadmap] = useState<Roadmap | null>(null);
   const [careerTitle, setCareerTitle] = useState("");
+  const [careerDescription, setCareerDescription] = useState("");
   const [steps, setSteps] = useState([{ title: "", details: "", resourceUrl: "" }]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const editId = searchParams.get("edit");
 
   const refresh = async (query?: string, scope: "all" | "owned" = ownershipFilter) => {
     setIsLoading(true);
@@ -34,6 +41,64 @@ export function RoadmapsPage() {
   useEffect(() => {
     void refresh(searchTitle, ownershipFilter);
   }, [ownershipFilter]);
+
+  useEffect(() => {
+    if (!editId || !session?.user?.id) {
+      return;
+    }
+    let cancelled = false;
+
+    const clearEditParam = () => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("edit");
+          return next;
+        },
+        { replace: true },
+      );
+    };
+
+    void (async () => {
+      try {
+        const r = await getRoadmapById(editId);
+        if (cancelled) {
+          return;
+        }
+        if (!r) {
+          toast.error("Roadmap not found");
+          clearEditParam();
+          return;
+        }
+        if (r.user_id !== session.user.id) {
+          toast.error("You can only edit your own roadmaps");
+          clearEditParam();
+          return;
+        }
+        setEditingRoadmap(r);
+        setCareerTitle(r.career_title);
+        setCareerDescription(r.career_description ?? "");
+        setSteps(
+          r.steps.map((step) => ({
+            title: step.title,
+            details: step.details,
+            resourceUrl: step.resource_url,
+          })),
+        );
+        setDrawerOpen(true);
+        clearEditParam();
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Failed to load roadmap");
+          clearEditParam();
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editId, session?.user?.id, setSearchParams]);
 
   const onSearch = async () => {
     await refresh(searchTitle, ownershipFilter);
@@ -69,6 +134,7 @@ export function RoadmapsPage() {
     try {
       const payload = {
         careerTitle: careerTitle.trim(),
+        careerDescription: careerDescription.trim(),
         steps: validSteps.map((step) => ({
           title: step.title.trim(),
           details: step.details.trim(),
@@ -85,6 +151,7 @@ export function RoadmapsPage() {
       setDrawerOpen(false);
       setEditingRoadmap(null);
       setCareerTitle("");
+      setCareerDescription("");
       setSteps([{ title: "", details: "", resourceUrl: "" }]);
       await refresh(searchTitle, ownershipFilter);
     } catch (error) {
@@ -125,6 +192,7 @@ export function RoadmapsPage() {
               onClick={() => {
                 setEditingRoadmap(null);
                 setCareerTitle("");
+                setCareerDescription("");
                 setSteps([{ title: "", details: "", resourceUrl: "" }]);
                 setDrawerOpen(true);
               }}
@@ -140,78 +208,39 @@ export function RoadmapsPage() {
         <h3 className="text-lg font-medium">Recently Added Roadmaps</h3>
         {isLoading
           ? Array.from({ length: 3 }).map((_, index) => (
-              <Card key={`roadmap-skeleton-${index}`} className="space-y-3">
-                <Skeleton className="h-6 w-2/5" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-4/5" />
+              <Card key={`roadmap-skeleton-${index}`} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Skeleton className="h-6 w-2/5" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <Skeleton className="h-9 w-24 shrink-0 self-start sm:self-center" />
               </Card>
             ))
           : roadmaps.map((roadmap) => (
-              <Card key={roadmap.id} className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-lg font-semibold">{roadmap.career_title}</p>
+              <Card
+                key={roadmap.id}
+                className="flex flex-col gap-4 border-slate-800 p-4 sm:flex-row sm:items-stretch sm:justify-between sm:gap-6"
+              >
+                <div className="min-w-0 flex-1 space-y-2">
+                  <h3 className="text-lg font-semibold leading-snug text-slate-50">{roadmap.career_title}</h3>
+                  <p className="line-clamp-2 text-sm leading-relaxed text-slate-400">
+                    {roadmap.career_description.trim() ? roadmap.career_description : "No description yet."}
+                  </p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    {roadmap.steps.length} {roadmap.steps.length === 1 ? "step" : "steps"}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-col gap-2 sm:w-36">
+                  <Button asChild variant="default" size="sm" className="w-full">
+                    <Link to={`/app/roadmaps/${roadmap.id}`}>View</Link>
+                  </Button>
                   {ownershipFilter === "owned" ? (
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setEditingRoadmap(roadmap);
-                          setCareerTitle(roadmap.career_title);
-                          setSteps(
-                            roadmap.steps.map((step) => ({
-                              title: step.title,
-                              details: step.details,
-                              resourceUrl: step.resource_url,
-                            })),
-                          );
-                          setDrawerOpen(true);
-                        }}
-                      >
-                        Update
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          if (!window.confirm("Delete this roadmap?")) {
-                            return;
-                          }
-                          try {
-                            await deleteRoadmap(roadmap.id);
-                            toast.success("Roadmap deleted");
-                            await refresh(searchTitle, ownershipFilter);
-                          } catch (error) {
-                            toast.error(error instanceof Error ? error.message : "Failed to delete roadmap");
-                          }
-                        }}
-                      >
-                        Delete
-                      </Button>
-                    </div>
+                    <Button asChild variant="outline" size="sm" className="w-full">
+                      <Link to={`/app/roadmaps?edit=${roadmap.id}`}>Edit</Link>
+                    </Button>
                   ) : null}
                 </div>
-                <ol className="relative ml-4 border-l border-slate-800">
-                  {roadmap.steps.map((step) => (
-                    <li key={step.id} className="mb-6 ml-6">
-                      <span className="absolute -left-[7px] mt-1.5 h-3 w-3 rounded-full bg-cyan-400" />
-                      <h4 className="text-base font-medium">
-                        {step.order_index}. {step.title}
-                      </h4>
-                      {step.details ? <p className="mt-1 text-sm text-slate-300">{step.details}</p> : null}
-                      {step.resource_url ? (
-                        <a
-                          href={step.resource_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-block text-sm text-cyan-300 hover:underline"
-                        >
-                          Open resource
-                        </a>
-                      ) : null}
-                    </li>
-                  ))}
-                </ol>
               </Card>
             ))}
       </div>
@@ -230,6 +259,15 @@ export function RoadmapsPage() {
               <div className="space-y-2">
                 <Label>Career path title</Label>
                 <Input value={careerTitle} onChange={(e) => setCareerTitle(e.target.value)} placeholder="Frontend Engineer Path" />
+              </div>
+              <div className="space-y-2">
+                <Label>Career path description</Label>
+                <textarea
+                  value={careerDescription}
+                  onChange={(e) => setCareerDescription(e.target.value)}
+                  placeholder="What this path covers and who it is for"
+                  className="min-h-24 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                />
               </div>
               {steps.map((step, idx) => (
                 <Card key={`new-step-${idx}`} className="space-y-2">
